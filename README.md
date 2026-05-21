@@ -2,9 +2,57 @@
 
 > **Receive a new-email event from Microsoft 365 in an Azure Function — where the only thing allowed to invoke that function is the Connector Namespace's own managed identity (no shared keys, no client secrets, anywhere).**
 
-This is the same "hello, `OnNewEmail`" payload as [`azure-functions-m365-email-hello`](https://github.com/nzthiago/azure-functions-m365-email-hello), repackaged into the standard `src/` + `infra/` + `azure.yaml` layout used by the full [end-to-end sample](https://github.com/Azure-Samples/functions-connectors-net-e2e-email-users-teams), with the **MI + App Service built-in authentication** security layer added on top.
+## Deploy and test
 
-> ⚠️ Preview. Uses `Microsoft.Web/connectorGateways@2026-05-01-preview` and the `Azure.Connectors.Sdk` preview NuGet packages. The Connector Namespace itself currently only deploys to **`westcentralus`**; the function app can live anywhere (defaults to wherever `azd up` provisions).
+**Prereqs:** `azd`, `az` CLI, .NET 10 preview SDK, `jq` (for the bash post-deploy script).
+
+```bash
+azd auth login
+az login
+
+# Some tenants (Microsoft included) require every new Entra app registration to
+# carry a Service Management Reference. If you hit
+# "ServiceManagementReference field is required for Update" during provision,
+# set this once on the azd env -- the value is your service tree GUID or any
+# identifier your tenant policy accepts.
+azd env set SERVICE_MANAGEMENT_REFERENCE <your-service-tree-guid>
+
+azd up
+```
+
+The post-deploy hook creates the trigger config (with the `ManagedServiceIdentity` authentication block) on the Connector Namespace, installs the `connector-namespace` Azure CLI extension if needed, and opens a browser to OAuth-authorize the `office365` connection.
+
+**Confirm built-in auth is the live gate** — hit the function with no token, expect a 401:
+
+```bash
+curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail"
+# → HTTP/1.1 401 Unauthorized
+# → WWW-Authenticate: Bearer realm="<your-func>.azurewebsites.net"
+```
+
+**Confirm the end-to-end happy path** — send yourself an email, then check Application Insights `traces` for the `OnNewEmail invoked` line (and the rest of the payload log).
+
+### Re-running `azd up` / `azd provision`
+
+The Connector Namespace RP **rejects `identity` in update PUTs after the resource is created**, even when the body is identical to live state:
+
+```
+ManagedIdentityInvalid: The request to update resource 'cns-…' managed identities
+is not valid. The user assigned identities can not be changed.
+```
+
+To avoid this on the 2nd+ provision, set `CREATE_CONNECTOR_NAMESPACE` to `false`. The bicep then references the namespace as `existing` instead of re-PUTing it; the `office365` connection, access policies, and everything else continue to deploy normally:
+
+```bash
+azd env set CREATE_CONNECTOR_NAMESPACE false
+azd up   # or: azd provision
+```
+
+If you only changed function code (not infra), skip provision entirely:
+
+```bash
+azd deploy
+```
 
 ---
 
@@ -76,7 +124,7 @@ Two managed identities, one Entra app, one federated trust — and **zero secret
 | **Function-app UAMI** | Storage + App Insights access, and the identity that built-in auth uses (via FIC) to mint client assertions instead of a client secret. |
 | **Trigger UAMI** | Attached to the Connector Namespace. The connector runtime uses this identity to mint the AAD bearer token attached to every callback. |
 | **Entra app registration** | The `aud` of the bearer token. Has a federated identity credential trusting the function-app UAMI (so built-in auth can authenticate the app *as* the Entra app without storing a secret). |
-| **App Service built-in authentication** (a.k.a. EasyAuth / `authsettingsV2`) | Edge-level token validator. Configured with `clientId` = Entra app, `allowedAudiences` = its clientId/identifierUri, `allowedPrincipals.identities` = `[trigger UAMI principalId]`. |
+| **App Service built-in authentication** (`authsettingsV2`) | Edge-level token validator. Configured with `clientId` = Entra app, `allowedAudiences` = its clientId/identifierUri, `allowedPrincipals.identities` = `[trigger UAMI principalId]`. |
 | **Connector Namespace** | Hosts the `office365` connection (OAuth to your mailbox) and the trigger config. |
 
 ### What's enforced — and where
@@ -110,93 +158,3 @@ This means **no application code is needed for the access check** — the functi
 ```
 
 The shared-key check is strictly weaker than the AAD token check (a key is a static secret; a token is signed, audience-scoped, identity-scoped, and short-lived), so removing it deletes a thing-to-leak without lowering the security bar. **Built-in authentication is the only gate.**
-
-> **Heads-up on per-call audit logging.** Built-in auth normally injects `X-MS-CLIENT-PRINCIPAL-ID` / `-NAME` / `X-MS-CLIENT-PRINCIPAL` on every authenticated HTTP request — handy for HTTP-triggered functions. A **connector trigger is different**: the runtime's `/runtime/webhooks/connector` endpoint consumes the HTTP request and dispatches the worker with only the deserialized payload, so `FunctionContext.GetHttpContext()` returns `null` and those headers are unreachable from inside the function. Don't try to log caller `oid` here — *the fact that the function ran is the audit signal* (built-in auth would have 401'd anything else at the edge).
-
-### Verifying after deploy
-
-Hit the function with no token — built-in auth should block it at the edge:
-
-```bash
-curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail"
-# → HTTP/1.1 401 Unauthorized
-# → WWW-Authenticate: Bearer realm="<your-func>.azurewebsites.net"
-```
-
-For the end-to-end happy path, send yourself an email and tail the logs:
-
-```bash
-az functionapp log tail -g <resourceGroupName> -n <functionAppName>
-```
-
----
-
-## Layout
-
-```
-azure.yaml
-src/                                # function app (azd service "function-app")
-  m365-email-secured.csproj
-  OnNewEmail.cs                     # the trigger handler — payload in, log out
-  Program.cs                        # OTEL → Azure Monitor (with MI credential)
-  host.json
-  local.settings.json.sample
-  test.http
-infra/
-  main.bicep                        # subscription-scoped, creates RG + everything
-  main.parameters.json
-  connectorNamespace.bicep          # Connector Namespace + office365 connection
-  abbreviations.json
-  bicepconfig.json                  # enables microsoftGraphV1 extension
-  app/
-    entra.bicep                     # Entra app reg + FIC for the function-app MI
-  scripts/
-    postdeploy.sh / postdeploy.ps1  # creates trigger config + OAuth-authorizes connection
-```
-
----
-
-## Deploy
-
-**Prereqs:** `azd`, `az` CLI, .NET 10 preview SDK, `jq` (for the bash post-deploy script).
-
-```bash
-azd auth login
-az login
-
-# Some tenants (Microsoft included) require every new Entra app registration to
-# carry a Service Management Reference. If you hit
-# "ServiceManagementReference field is required for Update" during provision,
-# set this once on the azd env -- the value is your service tree GUID or any
-# identifier your tenant policy accepts.
-azd env set SERVICE_MANAGEMENT_REFERENCE <your-service-tree-guid>
-
-azd up
-```
-
-The post-deploy hook will:
-1. Create the trigger config (with the `ManagedServiceIdentity` authentication block) on the Connector Namespace.
-2. Install the `connector-namespace` Azure CLI extension if needed.
-3. Open a browser to OAuth-authorize the office365 connection.
-
-### Re-running `azd up` / `azd provision`
-
-The Connector Namespace RP **rejects `identity` in update PUTs after the resource is created**, even when the body is identical to live state:
-
-```
-ManagedIdentityInvalid: The request to update resource 'cns-…' managed identities
-is not valid. The user assigned identities can not be changed.
-```
-
-To avoid this on the 2nd+ provision, set `CREATE_CONNECTOR_NAMESPACE` to `false` on your azd env. The bicep then references the namespace as `existing` instead of re-PUTing it; children (the office365 connection, access policies) and everything else continue to deploy normally:
-
-```bash
-azd env set CREATE_CONNECTOR_NAMESPACE false
-azd up   # or: azd provision
-```
-
-If you only changed function code (not infra), skip provision entirely:
-
-```bash
-azd deploy
-```
