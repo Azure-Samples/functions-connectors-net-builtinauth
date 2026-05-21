@@ -2,6 +2,10 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
+@description('Resource ID of the user-assigned managed identity to attach to the Connector Namespace. This is the identity the trigger uses to mint tokens when calling the function app callback URL.')
+param triggerIdentityResourceId string
+@description('Object (principal) ID of the same user-assigned managed identity, granted access to the office365 connection.')
+param triggerIdentityPrincipalId string
 @description('Object (principal) ID of the function app user-assigned MI. Granted access to the office365 connection so it can call the connector at runtime.')
 param functionAppPrincipalId string
 @description('Optional. AAD object ID of a user (typically the deployer) to also grant access to the connection, so the same code can be debugged locally with `az login` credentials.')
@@ -13,7 +17,10 @@ resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview'
   location: location
   tags: tags
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${triggerIdentityResourceId}': {}
+    }
   }
 }
 
@@ -34,6 +41,22 @@ resource office365ConnectionFunctionAppAccessPolicy 'Microsoft.Web/connectorGate
       type: 'ActiveDirectory'
       identity: {
         objectId: functionAppPrincipalId
+        tenantId: tenantId
+      }
+    }
+  }
+}
+
+// Trigger UAMI -> Office 365 connection. The connector namespace runtime impersonates
+// this identity when reading from the mailbox on behalf of the trigger config.
+resource office365ConnectionTriggerIdentityAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
+  parent: office365Connection
+  name: 'trigger-msi'
+  properties: {
+    principal: {
+      type: 'ActiveDirectory'
+      identity: {
+        objectId: triggerIdentityPrincipalId
         tenantId: tenantId
       }
     }
@@ -67,8 +90,3 @@ output connectionName string = office365Connection.name
 @description('Runtime URL for the Office 365 connection.')
 output office365ConnectionRuntimeUrl string = office365Connection.properties.connectionRuntimeUrl
 
-@description('Object (principal) ID of the Connector Namespace system-assigned managed identity. Used as an allowed principal in the Function App EasyAuth config.')
-output namespacePrincipalId string = connectorNamespace.identity.principalId
-
-@description('Tenant ID of the Connector Namespace system-assigned managed identity.')
-output namespaceTenantId string = connectorNamespace.identity.tenantId

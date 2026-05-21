@@ -24,6 +24,7 @@ connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceC
 functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
 office365FunctionName=$(echo "$outputs" | jq -r '.office365FunctionName')
 entraAppClientId=$(echo "$outputs" | jq -r '.entraAppClientId')
+triggerIdentityResourceId=$(echo "$outputs" | jq -r '.triggerIdentityResourceId')
 
 # --- Create Connector Namespace trigger config ---
 echo -e "${YELLOW}Creating Connector Namespace trigger config...${NC}"
@@ -37,10 +38,9 @@ callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/conne
 apiUrl="https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.Web/connectorGateways/${connectorNamespaceName}/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
 
 # notificationDetails.authentication tells the connector to attach an Entra ID
-# token from the namespace's system-assigned MI when calling the callbackUrl.
-# The audience must match what EasyAuth on the function app expects.
-# NOTE: This is the working shape per current preview guidance. If the property
-# names change in a future preview, update them here. See README "Security model".
+# token (minted from the user-assigned MI referenced by `identity`) when calling
+# the callbackUrl. The token's audience must match an allowedAudience configured
+# on the function app's EasyAuth -- we use the Entra app's clientId.
 body=$(cat <<JSON
 {
   "properties": {
@@ -58,9 +58,11 @@ body=$(cat <<JSON
     ],
     "notificationDetails": {
       "callbackUrl": "${callbackUrl}",
+      "httpMethod": "Post",
       "authentication": {
         "type": "ManagedServiceIdentity",
-        "audience": "${entraAppClientId}"
+        "audience": "${entraAppClientId}",
+        "identity": "${triggerIdentityResourceId}"
       }
     }
   }

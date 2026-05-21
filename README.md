@@ -9,10 +9,10 @@ It's the same single-function payload as [`azure-functions-m365-email-hello`](ht
 ## Security model
 
 ```
-┌────────────────────────┐    AAD token (system-assigned MI)    ┌────────────────────────┐
+┌────────────────────────┐    AAD token (trigger UAMI)          ┌────────────────────────┐
 │  Connector Namespace   │  ───────────────────────────────────►│  Function App          │
-│  (system-assigned MI)  │   audience = Entra app's clientId    │  EasyAuth (authsetting │
-│                        │                                       │  V2) validates aud +   │
+│  attached UAMI         │   audience = Entra app's clientId    │  EasyAuth (authsetting │
+│  (trigger identity)    │                                       │  V2) validates aud +   │
 │                        │                                       │  caller oid            │
 └────────────────────────┘                                       └────────────────────────┘
                                                                           │ FIC
@@ -25,26 +25,30 @@ It's the same single-function payload as [`azure-functions-m365-email-hello`](ht
 
 What `infra/` sets up:
 
-1. **User-assigned managed identity** on the function app.
+1. **Two user-assigned managed identities**:
+   - One attached to the **function app** (storage, App Insights, EasyAuth FIC).
+   - A dedicated one attached to the **Connector Namespace** as the "trigger identity" — referenced in the trigger config and used to mint AAD tokens when calling the callback URL.
 2. **Entra app registration** (`infra/app/entra.bicep`) with a **federated identity credential** trusting the function app's user-assigned MI. EasyAuth uses this to mint client assertions, so no client secret is ever stored.
 3. **App Service Authentication V2** on the function app (`authsettingsV2` config):
    - `requireAuthentication: true`, `unauthenticatedClientAction: Return401`
    - `clientId` = the Entra app
    - `clientSecretSettingName: OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID` (magic value — tells EasyAuth to use FIC against the named user-assigned MI, no secret needed)
    - `allowedAudiences` = the Entra app's `applicationId` and `identifierUri`
-   - `defaultAuthorizationPolicy.allowedPrincipals.identities` = `[connectorNamespace.identity.principalId]` — **only the Connector Namespace's MI is allowed in**.
-4. **Connector Namespace** with a system-assigned MI and an `office365` connection. The function app's MI gets an access policy on the connection so it can call back into the connector at runtime.
-5. **Trigger config** (created in `infra/scripts/postdeploy.sh|ps1`) with `notificationDetails.authentication` set to:
+   - `defaultAuthorizationPolicy.allowedPrincipals.identities` = `[triggerUserAssignedIdentity.principalId]` — **only the Connector Namespace's trigger UAMI is allowed in**.
+4. **Connector Namespace** with the trigger UAMI attached and an `office365` connection. Both the trigger UAMI (so the connector runtime can read the mailbox) and the function app's MI (for SDK calls back into the connection) get access policies on the connection.
+5. **Trigger config** (created in `infra/scripts/postdeploy.sh|ps1`) — exact shape per Aparna Seth's guidance:
    ```json
-   {
+   "notificationDetails": {
      "callbackUrl": "https://<func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail",
+     "httpMethod": "Post",
      "authentication": {
        "type": "ManagedServiceIdentity",
-       "audience": "<entra-app-clientId>"
+       "audience": "<entra-app-clientId>",
+       "identity": "<trigger-uami-resourceId>"
      }
    }
    ```
-   The connector then attaches an AAD token from its system-assigned MI on every callback. **No `code=` query string.**
+   The connector then attaches an AAD token (audience = our Entra app, signed by the trigger UAMI) on every callback. **No `code=` query string. No shared key. No client secret.**
 
 The function code itself is unchanged from the hello sample — it just logs the inbound email payload.
 
@@ -91,10 +95,6 @@ Send yourself an email and watch the function fire:
 ```bash
 az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ```
-
-## Open question — exact `notificationDetails` shape
-
-The `notificationDetails.authentication` block above is the working shape per current preview guidance for Connector Namespace + MI. If the property name turns out to be `identity` instead of `authentication`, or if the audience field is `resource` instead of `audience`, edit `infra/scripts/postdeploy.{sh,ps1}` accordingly — that's the only place this contract lives.
 
 ## Local dev
 

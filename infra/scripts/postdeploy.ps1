@@ -10,6 +10,7 @@ $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
 $office365FunctionName = $outputs.office365FunctionName
 $entraAppClientId = $outputs.entraAppClientId
+$triggerIdentityResourceId = $outputs.triggerIdentityResourceId
 
 # --- Create Connector Namespace trigger config ---
 Write-Host "Creating Connector Namespace trigger config..." -ForegroundColor Yellow
@@ -34,9 +35,11 @@ $body = @{
     )
     notificationDetails = @{
       callbackUrl = $callbackUrl
+      httpMethod = "Post"
       authentication = @{
         type = "ManagedServiceIdentity"
         audience = $entraAppClientId
+        identity = $triggerIdentityResourceId
       }
     }
   }

@@ -34,6 +34,7 @@ var tags = { 'azd-env-name': environmentName }
 var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
 var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
 var functionAppIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}${resourceToken}'
+var triggerIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}trigger-${resourceToken}'
 var resourceGroupName = '${abbrs.resourcesResourceGroups}${environmentName}'
 var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
@@ -72,6 +73,19 @@ module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigne
     location: location
     tags: tags
     name: functionAppIdentityName
+  }
+}
+
+// Dedicated identity attached to the Connector Namespace. The trigger config
+// references this UAMI by resource ID; the namespace runtime uses it to mint
+// AAD tokens when calling the function app callback URL.
+module triggerUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+  name: 'triggerUserAssignedIdentity'
+  scope: rg
+  params: {
+    location: location
+    tags: tags
+    name: triggerIdentityName
   }
 }
 
@@ -165,8 +179,9 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection. System-assigned MI is what calls
-// back into the function app and is authenticated by EasyAuth on the way in.
+// Connector Namespace + office365 connection. A dedicated user-assigned MI is
+// attached so the trigger can mint AAD tokens; EasyAuth on the function app
+// validates those tokens and gates everything else out.
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -175,6 +190,8 @@ module connectorNamespace './connectorNamespace.bicep' = {
     location: 'brazilsouth' // Connector Namespace preview is only in Brazil South for now.
     tags: tags
     connectionName: connectorNamespaceConnectionName
+    triggerIdentityResourceId: triggerUserAssignedIdentity.outputs.resourceId
+    triggerIdentityPrincipalId: triggerUserAssignedIdentity.outputs.principalId
     functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
     userPrincipalId: userPrincipalId
   }
@@ -289,10 +306,10 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
                 ]
                 defaultAuthorizationPolicy: {
                   allowedPrincipals: {
-                    // The Connector Namespace's system-assigned MI is the only
-                    // identity that's allowed in. Tokens are matched by oid.
+                    // Only the Connector Namespace's trigger UAMI is allowed in.
+                    // Tokens are matched by oid (the UAMI's principalId).
                     identities: [
-                      connectorNamespace.outputs.namespacePrincipalId
+                      triggerUserAssignedIdentity.outputs.principalId
                     ]
                   }
                 }
@@ -342,3 +359,6 @@ output entraAppClientId string = entraApp.outputs.applicationId
 
 @description('Identifier URI of the Entra app registration (alternative audience value).')
 output entraAppIdentifierUri string = entraApp.outputs.identifierUri
+
+@description('Resource ID of the user-assigned MI attached to the Connector Namespace (referenced by the trigger config notificationDetails.authentication.identity).')
+output triggerIdentityResourceId string = triggerUserAssignedIdentity.outputs.resourceId
