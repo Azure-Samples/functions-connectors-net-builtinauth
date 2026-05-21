@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "m365_email_secured": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7102",
+      "launchBrowser": false
+    }
+  }
+}
