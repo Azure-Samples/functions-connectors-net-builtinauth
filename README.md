@@ -39,7 +39,7 @@ What `infra/` sets up:
 5. **Trigger config** (created in `infra/scripts/postdeploy.sh|ps1`) — exact shape per Aparna Seth's guidance:
    ```json
    "notificationDetails": {
-     "callbackUrl": "https://<func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail&code=<connector_extension key>",
+     "callbackUrl": "https://<func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail",
      "httpMethod": "Post",
      "authentication": {
        "type": "ManagedServiceIdentity",
@@ -48,18 +48,27 @@ What `infra/` sets up:
      }
    }
    ```
-   The connector then attaches an AAD token (audience = our Entra app, signed by the trigger UAMI) on every callback. **No client secret. No shared key in app config.**
+   The connector then attaches an AAD token (audience = our Entra app, signed by the trigger UAMI) on every callback. **No client secret. No shared key. No `code=` in the URL.**
 
-### Two layers, on purpose
+### One enforcement layer: built-in authentication
 
-Built-in authentication + the `code=` system key are **independent checks**:
+`/runtime/webhooks/connector` is normally protected by a Functions system key (`connector_extension`) — that's the `&code=...` query string. We opt the route out of that check in `src/host.json`:
 
-| Layer | Where | What it gates on |
-|---|---|---|
-| Built-in authentication (outer) | App Service "front door" — before the function host sees the request | AAD token: audience matches our Entra app, caller `oid` is the trigger UAMI |
-| `connector_extension` system key (inner) | Functions runtime, on `/runtime/webhooks/connector` | The `code=` query string matches the function app's `systemKeys.connector_extension` |
+```json
+{
+  "version": "2.0",
+  "telemetryMode": "OpenTelemetry",
+  "extensions": {
+    "connector": {
+      "system": {
+        "webhookAuthorizationLevel": "Anonymous"
+      }
+    }
+  }
+}
+```
 
-The Functions runtime always requires a webhook system key for built-in webhook handlers like `/runtime/webhooks/connector` — there is no app setting that disables it. So we keep `code=` in the callback URL and treat built-in authentication as **defense in depth** on top: even if the system key leaks, a caller that isn't the trigger UAMI still gets a 401/403 at the App Service edge.
+This drops the inner key check so we don't have to manage a shared secret in the callback URL. **Built-in authentication is the only gate** — and it's the strongest one, because it validates a real AAD token tied to a specific managed identity.
 
 ### How "only the trigger UAMI can call in" is enforced
 
@@ -87,14 +96,13 @@ If you want to audit *which* identity called in, built-in authentication injects
 
 ```bash
 FUNC=https://<your-func>.azurewebsites.net
-KEY=<connector_extension system key>
 
-# 1. No token, no key  → 401 (built-in auth blocks before the runtime)
-curl -i $FUNC/runtime/webhooks/connector?functionName=OnNewEmail
+# 1. No token → 401 (built-in auth blocks before the runtime)
+curl -i "$FUNC/runtime/webhooks/connector?functionName=OnNewEmail"
 
 # 2. Valid token but wrong identity (you, via az cli) → 403
 TOKEN=$(az account get-access-token --resource <entra-app-clientId> --query accessToken -o tsv)
-curl -i -H "Authorization: Bearer $TOKEN" "$FUNC/runtime/webhooks/connector?functionName=OnNewEmail&code=$KEY"
+curl -i -H "Authorization: Bearer $TOKEN" "$FUNC/runtime/webhooks/connector?functionName=OnNewEmail"
 ```
 
 The function code itself is unchanged from the hello sample — it just logs the inbound email payload.
