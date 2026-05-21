@@ -115,18 +115,19 @@ The shared-key check is strictly weaker than the AAD token check (a key is a sta
 
 ### Verifying after deploy
 
+Hit the function with no token — built-in auth should block it at the edge:
+
 ```bash
-FUNC=https://<your-func>.azurewebsites.net
-
-# 1. No token → 401, with WWW-Authenticate: Bearer (built-in auth blocked it)
-curl -i "$FUNC/runtime/webhooks/connector?functionName=OnNewEmail"
-
-# 2. Valid token but wrong identity (you, via az cli) → 403
-TOKEN=$(az account get-access-token --resource <entra-app-clientId> --query accessToken -o tsv)
-curl -i -H "Authorization: Bearer $TOKEN" "$FUNC/runtime/webhooks/connector?functionName=OnNewEmail"
+curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail"
+# → HTTP/1.1 401 Unauthorized
+# → WWW-Authenticate: Bearer realm="<your-func>.azurewebsites.net"
 ```
 
-The end-to-end happy path is "send yourself an email and watch the function fire" — see [Deploy](#deploy) below.
+For the end-to-end happy path, send yourself an email and tail the logs:
+
+```bash
+az functionapp log tail -g <resourceGroupName> -n <functionAppName>
+```
 
 ---
 
@@ -178,12 +179,6 @@ The post-deploy hook will:
 2. Install the `connector-namespace` Azure CLI extension if needed.
 3. Open a browser to OAuth-authorize the office365 connection.
 
-Send yourself an email and tail the logs:
-
-```bash
-az functionapp log tail -g <resourceGroupName> -n <functionAppName>
-```
-
 ### Re-running `azd up` / `azd provision`
 
 The Connector Namespace RP **rejects `identity` in update PUTs after the resource is created**, even when the body is identical to live state:
@@ -204,15 +199,4 @@ If you only changed function code (not infra), skip provision entirely:
 
 ```bash
 azd deploy
-```
-
----
-
-## Local dev
-
-Local dev uses your `az login` user (the deployer `principalId` is passed in via `userPrincipalId` and granted access on the office365 connection), so you can run the function locally against the same Connector Namespace connection. Built-in authentication is an App Service edge concern and doesn't apply at `localhost`.
-
-```bash
-cd src
-func start
 ```
