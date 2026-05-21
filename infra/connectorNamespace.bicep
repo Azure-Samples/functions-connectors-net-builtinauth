@@ -12,7 +12,10 @@ param functionAppPrincipalId string
 param userPrincipalId string = ''
 param tenantId string = tenant().tenantId
 
-resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' = {
+@description('When false, reference the namespace as existing instead of creating/updating it. Required workaround for the Connector Namespace RP rejecting identity in update PUTs ("ManagedIdentityInvalid: user assigned identities can not be changed"), even when the body is byte-for-byte identical to current state. Set to false on the second+ provision by running: azd env set CREATE_CONNECTOR_NAMESPACE false')
+param createConnectorNamespace bool = true
+
+resource newConnectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' = if (createConnectorNamespace) {
   name: name
   location: location
   tags: tags
@@ -24,12 +27,18 @@ resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview'
   }
 }
 
+resource existingConnectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = if (!createConnectorNamespace) {
+  name: name
+}
+
+// Use a fully-qualified child name so we don't need a conditional `parent:`
+// (Bicep doesn't allow conditional parent references).
 resource office365Connection 'Microsoft.Web/connectorGateways/connections@2026-05-01-preview' = {
-  parent: connectorNamespace
-  name: connectionName
+  name: '${name}/${connectionName}'
   properties: {
     connectorName: 'office365'
   }
+  dependsOn: createConnectorNamespace ? [ newConnectorNamespace ] : [ existingConnectorNamespace ]
 }
 
 // Function App MI -> Office 365 connection (used by the trigger callback path).
@@ -79,10 +88,10 @@ resource office365ConnectionUserAccessPolicy 'Microsoft.Web/connectorGateways/co
 }
 
 @description('The resource ID of the Connector Namespace.')
-output resourceId string = connectorNamespace.id
+output resourceId string = createConnectorNamespace ? newConnectorNamespace.id : existingConnectorNamespace.id
 
 @description('The name of the Connector Namespace.')
-output name string = connectorNamespace.name
+output name string = name
 
 @description('The name of the Office 365 connection on the namespace.')
 output connectionName string = office365Connection.name

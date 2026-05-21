@@ -145,6 +145,28 @@ The post-deploy hook will:
 2. Install the `connector-namespace` Azure CLI extension if needed.
 3. Open a browser to OAuth-authorize the office365 connection.
 
+### Subsequent `azd up` / `azd provision` runs — flip the namespace toggle
+
+The Connector Namespace RP **rejects `identity` in update PUTs after the resource is created**, even when the body is identical to live state:
+
+```
+ManagedIdentityInvalid: The request to update resource 'cns-…' managed
+identities is not valid. The user assigned identities can not be changed.
+```
+
+To avoid this on the 2nd+ provision, set `CREATE_CONNECTOR_NAMESPACE` to `false` on your azd env. The bicep then references the namespace as `existing` instead of re-PUTing it; children (the office365 connection + access policies) and everything else continue to deploy normally:
+
+```bash
+azd env set CREATE_CONNECTOR_NAMESPACE false
+azd up   # or: azd provision
+```
+
+If you only changed function code (not infra), skip provision entirely:
+
+```bash
+azd deploy
+```
+
 Send yourself an email and watch the function fire:
 
 ```bash

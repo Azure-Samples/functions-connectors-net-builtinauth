@@ -30,6 +30,9 @@ param office365FunctionName string = 'OnNewEmail'
 @description('Optional. Service Management Reference (e.g. a service tree GUID) attached to the Entra app registration. Required by some tenant policies — see https://aka.ms/service-management-reference-error.')
 param serviceManagementReference string = ''
 
+@description('When false, the Connector Namespace is referenced as existing and not re-PUT. Workaround for the RP rejecting identity in update PUTs after creation. Set this to false (via `azd env set CREATE_CONNECTOR_NAMESPACE false`) after the first successful provision to make `azd up` idempotent.')
+param createConnectorNamespace bool = true
+
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
@@ -185,6 +188,13 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
 // Connector Namespace + office365 connection. A dedicated user-assigned MI is
 // attached so the trigger can mint AAD tokens; built-in authentication on the function app
 // validates those tokens and gates everything else out.
+//
+// NOTE: The Connector Namespace RP rejects `identity` in update PUTs after creation
+// ("ManagedIdentityInvalid: user assigned identities can not be changed") even when
+// the body is identical to current state. After the first successful provision, run:
+//   azd env set CREATE_CONNECTOR_NAMESPACE false
+// so subsequent `azd up`/`azd provision` skips the namespace PUT and only manages
+// children (connection + access policies).
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -197,6 +207,7 @@ module connectorNamespace './connectorNamespace.bicep' = {
     triggerIdentityPrincipalId: triggerUserAssignedIdentity.outputs.principalId
     functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
     userPrincipalId: userPrincipalId
+    createConnectorNamespace: createConnectorNamespace
   }
 }
 
