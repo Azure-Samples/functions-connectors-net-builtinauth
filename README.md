@@ -82,15 +82,15 @@ Built-in authentication runs **inside the App Service worker, before** the Funct
 
 This means **no application code is needed for the access check** — the function app code never sees a request that didn't come from the trigger UAMI.
 
-If you want to audit *which* identity called in, built-in authentication injects these headers on every authenticated request:
-
-| Header | Contents |
-|---|---|
-| `X-MS-CLIENT-PRINCIPAL-ID` | The validated `oid` (should equal the trigger UAMI's principalId) |
-| `X-MS-CLIENT-PRINCIPAL-NAME` | Usually the `appid` |
-| `X-MS-CLIENT-PRINCIPAL` | Base64-encoded JSON of all validated claims |
-
-`OnNewEmail.cs` logs `X-MS-CLIENT-PRINCIPAL-ID` so you can verify in App Insights that every invocation was authenticated as the trigger UAMI. (Locally the header is absent — built-in authentication runs only in Azure.)
+> **Heads-up on per-call audit logging:** built-in authentication normally injects
+> `X-MS-CLIENT-PRINCIPAL-ID` / `-NAME` / `X-MS-CLIENT-PRINCIPAL` (base64 claims) on
+> every authenticated HTTP request, which is great for HTTP-triggered functions.
+> A **connector trigger is different** — the runtime's `/runtime/webhooks/connector`
+> endpoint consumes the HTTP request, validates it, then dispatches the function
+> with only the deserialized payload. `FunctionContext.GetHttpContext()` returns
+> `null`, so the worker cannot read those headers. Don't try to log caller `oid`
+> from inside the function for this trigger type — the fact that the function ran
+> *is* the audit signal (built-in auth would have 401'd anything else at the edge).
 
 #### Verifying after deploy
 
