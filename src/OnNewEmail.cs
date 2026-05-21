@@ -1,5 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Connector;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Azure.Connectors.Sdk.Office365.Models;
 using System.Text.Json;
@@ -17,9 +18,20 @@ public class OnNewEmail
 
     [Function("OnNewEmail")]
     public void Run(
-        [ConnectorTrigger] Office365OnNewEmailTriggerPayload emailPayload)
+        [ConnectorTrigger] Office365OnNewEmailTriggerPayload emailPayload,
+        FunctionContext context)
     {
         _logger.LogInformation("Received Microsoft 365 OnNewEmail trigger");
+
+        // Audit who called us: in Azure, built-in authentication (aka EasyAuth) injects
+        // X-MS-CLIENT-PRINCIPAL-ID with the validated 'oid' of the caller. We expect
+        // this to match the trigger user-assigned managed identity's principalId.
+        // Locally this header will be absent (built-in auth runs only in Azure).
+        var http = context.GetHttpContext();
+        var callerOid = http?.Request.Headers["X-MS-CLIENT-PRINCIPAL-ID"].FirstOrDefault();
+        _logger.LogInformation(
+            "Caller validated by built-in authentication: oid={CallerOid}",
+            string.IsNullOrEmpty(callerOid) ? "(none — local run or built-in auth disabled)" : callerOid);
 
         try
         {

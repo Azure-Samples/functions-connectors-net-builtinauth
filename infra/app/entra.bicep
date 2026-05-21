@@ -12,10 +12,10 @@ param serviceManagementReference string = ''
 @description('Sign-in audience. AzureADMyOrg keeps the app single-tenant.')
 param signInAudience string = 'AzureADMyOrg'
 
-@description('Principal (object) ID of the user-assigned managed identity that will federate against this app. The FIC trusts this object ID; EasyAuth on the function app reads the corresponding clientId from an app setting to mint client assertions.')
+@description('Principal (object) ID of the user-assigned managed identity that will federate against this app. The FIC trusts this object ID; built-in authentication on the function app reads the corresponding clientId from an app setting to mint client assertions.')
 param managedIdentityPrincipalId string
 
-@description('Function App hostname (e.g. myfunc.azurewebsites.net). Used to build the EasyAuth redirect URI.')
+@description('Function App hostname (e.g. myfunc.azurewebsites.net). Used to build the built-in authentication redirect URI.')
 param functionAppHostname string
 
 @description('Tags object (key/value) passed in via azd.')
@@ -51,7 +51,7 @@ resource appServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
 }
 
 // Federated identity credential lets the function app's user-assigned MI mint
-// client assertions for this Entra app, so EasyAuth never needs a client secret.
+// client assertions for this Entra app, so built-in authentication never needs a client secret.
 resource federatedIdentityCredential 'Microsoft.Graph/applications/federatedIdentityCredentials@v1.0' = {
   name: '${appRegistration.uniqueName}/function-app-managed-identity'
   audiences: [
@@ -59,7 +59,7 @@ resource federatedIdentityCredential 'Microsoft.Graph/applications/federatedIden
   ]
   issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
   subject: managedIdentityPrincipalId
-  description: 'Federated identity credential for Function App user-assigned MI (EasyAuth client assertion)'
+  description: 'Federated identity credential for Function App user-assigned MI (built-in authentication client assertion)'
 }
 
 @description('App (client) ID of the Entra app registration.')

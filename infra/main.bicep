@@ -13,8 +13,8 @@ param environmentName string
 @description('Location for all resources except the Connector Namespace (which is pinned to westcentralus while in preview).')
 param location string
 
-metadata name = 'Azure Functions M365 Email Secured (MI + EasyAuth)'
-metadata description = 'Hello-world Connector Namespace trigger sample where the namespace authenticates to the function app via system-assigned MI + EasyAuth (no function key).'
+metadata name = 'Azure Functions M365 Email Secured (MI + built-in authentication)'
+metadata description = 'Hello-world Connector Namespace trigger sample where the namespace authenticates to the function app via system-assigned MI + built-in authentication (no function key).'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -183,7 +183,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
 }
 
 // Connector Namespace + office365 connection. A dedicated user-assigned MI is
-// attached so the trigger can mint AAD tokens; EasyAuth on the function app
+// attached so the trigger can mint AAD tokens; built-in authentication on the function app
 // validates those tokens and gates everything else out.
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
@@ -200,8 +200,8 @@ module connectorNamespace './connectorNamespace.bicep' = {
   }
 }
 
-// Entra app registration that EasyAuth validates incoming tokens against.
-// The function MI federates against this app so EasyAuth needs no client secret.
+// Entra app registration that built-in authentication validates incoming tokens against.
+// The function MI federates against this app so built-in auth needs no client secret.
 module entraApp './app/entra.bicep' = {
   scope: rg
   name: 'entraApp'
@@ -223,7 +223,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
-  // Magic value: tells EasyAuth to use the named user-assigned MI to mint
+  // Magic value: tells built-in authentication to use the named user-assigned MI to mint
   // a federated client assertion against the Entra app, in place of a client secret.
   OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID: funcUserAssignedIdentity.outputs.clientId
 }
@@ -272,7 +272,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
         properties: allAppSettings
       }
       {
-        // EasyAuth: every incoming request (including the connector callback)
+        // Built-in authentication: every incoming request (including the connector callback)
         // must carry a valid Entra ID token whose audience matches our app and
         // whose caller object ID is the Connector Namespace's system-assigned MI.
         name: 'authsettingsV2'
@@ -297,7 +297,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
               registration: {
                 openIdIssuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
                 clientId: entraApp.outputs.applicationId
-                // FIC instead of a client secret -- EasyAuth reads the
+                // FIC instead of a client secret -- built-in authentication reads the
                 // user-assigned MI from the named app setting and uses it to
                 // mint client assertions for the Entra app.
                 clientSecretSettingName: 'OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID'
@@ -358,7 +358,7 @@ output connectorNamespaceConnectionName string = connectorNamespace.outputs.conn
 @description('The name of the function that handles the Office 365 connector trigger.')
 output office365FunctionName string = office365FunctionName
 
-@description('App (client) ID of the Entra app registration EasyAuth validates against. Connector Namespace requests tokens for this audience.')
+@description('App (client) ID of the Entra app registration built-in authentication validates against. Connector Namespace requests tokens for this audience.')
 output entraAppClientId string = entraApp.outputs.applicationId
 
 @description('Identifier URI of the Entra app registration (alternative audience value).')
