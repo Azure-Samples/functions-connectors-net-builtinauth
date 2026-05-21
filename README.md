@@ -30,28 +30,12 @@ curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functi
 # → WWW-Authenticate: Bearer realm="<your-func>.azurewebsites.net"
 ```
 
-**Confirm the end-to-end happy path** — send yourself an email, then check Application Insights `traces` for the `OnNewEmail invoked` line (and the rest of the payload log).
-
-### Re-running `azd up` / `azd provision`
-
-The Connector Namespace RP **rejects `identity` in update PUTs after the resource is created**, even when the body is identical to live state:
+**Confirm the end-to-end happy path** — send yourself an email, then check Application Insights `traces` for the `OnNewEmail invoked` line (and the rest of the payload log). You should see logs similar to the following;
 
 ```
-ManagedIdentityInvalid: The request to update resource 'cns-…' managed identities
-is not valid. The user assigned identities can not be changed.
-```
-
-To avoid this on the 2nd+ provision, set `CREATE_CONNECTOR_NAMESPACE` to `false`. The bicep then references the namespace as `existing` instead of re-PUTing it; the `office365` connection, access policies, and everything else continue to deploy normally:
-
-```bash
-azd env set CREATE_CONNECTOR_NAMESPACE false
-azd up   # or: azd provision
-```
-
-If you only changed function code (not infra), skip provision entirely:
-
-```bash
-azd deploy
+5/21/2026, 3:10:58 PM Information OnNewEmail invoked (caller pre-validated by built-in authentication).
+5/21/2026, 3:10:58 PM Information Email received from: <sender's email address>
+5/21/2026, 3:10:58 PM Information Email subject: <email subject>
 ```
 
 ---
@@ -158,3 +142,25 @@ This means **no application code is needed for the access check** — the functi
 ```
 
 The shared-key check is strictly weaker than the AAD token check (a key is a static secret; a token is signed, audience-scoped, identity-scoped, and short-lived), so removing it deletes a thing-to-leak without lowering the security bar. **Built-in authentication is the only gate.**
+
+### Re-running `azd up` / `azd provision`
+
+The Connector Namespace RP **rejects `identity` in update PUTs after the resource is created**, even when the body is identical to live state:
+
+```
+ManagedIdentityInvalid: The request to update resource 'cns-…' managed identities
+is not valid. The user assigned identities can not be changed.
+```
+
+To avoid this on the 2nd+ provision, set `CREATE_CONNECTOR_NAMESPACE` to `false`. The bicep then references the namespace as `existing` instead of re-PUTing it; the `office365` connection, access policies, and everything else continue to deploy normally:
+
+```bash
+azd env set CREATE_CONNECTOR_NAMESPACE false
+azd up   # or: azd provision
+```
+
+If you only changed function code (not infra), skip provision entirely:
+
+```bash
+azd deploy
+```
