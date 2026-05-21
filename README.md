@@ -40,6 +40,18 @@ curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functi
 
 ---
 
+## Clean up
+
+⚠️ **While this sample is deployed, `OnNewEmail` logs the `From` and `Subject` of every email that arrives in the monitored mailbox to Application Insights.** That's fine for a hands-on demo, but you almost certainly don't want it running indefinitely against your real mailbox. Tear the sample down when you're done:
+
+```bash
+azd down --purge
+```
+
+`--purge` also removes the soft-deleted Application Insights / Log Analytics workspace so old email metadata doesn't linger.
+
+---
+
 ## How it works (end-to-end)
 
 ```
