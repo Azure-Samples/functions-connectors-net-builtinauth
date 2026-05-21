@@ -1,10 +1,10 @@
-# Azure Functions + Microsoft 365 Email — secured with Managed Identity + built-in authentication
+# Azure Functions + Microsoft 365 Email secured with Managed Identity + built-in authentication
 
 > **Receive a new-email event from Microsoft 365 in an Azure Function — where the only thing allowed to invoke that function is the Connector Namespace's own managed identity (no shared keys, no client secrets, anywhere).**
 
 ## Deploy and test
 
-**Prereqs:** `azd`, `az` CLI, .NET 10 preview SDK, `jq` (for the bash post-deploy script).
+**Prereqs:** `azd`, `az` CLI, .NET 10 SDK, `jq` (for the bash post-deploy script in Mac and Linux).
 
 ```bash
 azd auth login
