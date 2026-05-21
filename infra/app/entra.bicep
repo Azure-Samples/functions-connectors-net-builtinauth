@@ -6,6 +6,9 @@ param appUniqueName string
 @description('Display name for the Entra app registration.')
 param appDisplayName string
 
+@description('Optional. References application or service contact information from a Service or Asset Management database. Required by some tenant policies (see https://aka.ms/service-management-reference-error).')
+param serviceManagementReference string = ''
+
 @description('Sign-in audience. AzureADMyOrg keeps the app single-tenant.')
 param signInAudience string = 'AzureADMyOrg'
 
@@ -26,6 +29,7 @@ var redirectUri = 'https://${functionAppHostname}/.auth/login/aad/callback'
 resource appRegistration 'Microsoft.Graph/applications@v1.0' = {
   uniqueName: appUniqueName
   displayName: appDisplayName
+  serviceManagementReference: !empty(serviceManagementReference) ? serviceManagementReference : null
   signInAudience: signInAudience
   identifierUris: [identifierUri]
   tags: tagStrings

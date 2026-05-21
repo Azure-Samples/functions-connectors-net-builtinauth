@@ -13,6 +13,9 @@
     },
     "office365FunctionName": {
       "value": "OnNewEmail"
+    },
+    "serviceManagementReference": {
+      "value": "${SERVICE_MANAGEMENT_REFERENCE=}"
     }
   }
 }

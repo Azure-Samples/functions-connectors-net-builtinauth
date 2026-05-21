@@ -93,6 +93,14 @@ Prereqs: `azd`, `az` CLI, .NET 10 preview SDK, `jq` (for the bash post-deploy sc
 ```bash
 azd auth login
 az login
+
+# Some tenants (Microsoft included) require every new Entra app registration to
+# carry a Service Management Reference. If you hit
+# "ServiceManagementReference field is required for Update" during provision,
+# set this once on the azd env -- the value is your service tree GUID or any
+# identifier your tenant policy accepts.
+azd env set SERVICE_MANAGEMENT_REFERENCE <your-service-tree-guid>
+
 azd up
 ```
 

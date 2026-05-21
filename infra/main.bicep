@@ -27,6 +27,9 @@ param userPrincipalId string = deployer().objectId
 @description('Name of the Azure Function that handles the Office 365 connector trigger.')
 param office365FunctionName string = 'OnNewEmail'
 
+@description('Optional. Service Management Reference (e.g. a service tree GUID) attached to the Entra app registration. Required by some tenant policies — see https://aka.ms/service-management-reference-error.')
+param serviceManagementReference string = ''
+
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
@@ -205,6 +208,7 @@ module entraApp './app/entra.bicep' = {
   params: {
     appUniqueName: entraAppUniqueName
     appDisplayName: 'M365 Email Secured Function (${functionAppName})'
+    serviceManagementReference: serviceManagementReference
     managedIdentityPrincipalId: funcUserAssignedIdentity.outputs.principalId
     functionAppHostname: '${functionAppName}.azurewebsites.net'
     tags: tags
