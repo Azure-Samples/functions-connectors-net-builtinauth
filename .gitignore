@@ -428,3 +428,7 @@ FodyWeavers.xsd
 *.msm
 *.msp
 .azurite-data/
+
+# Azure Functions local settings — may contain connection strings / secrets.
+# Use src/local.settings.json.sample as the committed template instead.
+local.settings.json
