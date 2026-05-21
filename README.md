@@ -4,7 +4,7 @@ A minimal "hello, OnNewEmail" Connector Namespace trigger sample where **the onl
 
 It's the same single-function payload as [`azure-functions-m365-email-hello`](https://github.com/nzthiago/azure-functions-m365-email-hello), repackaged into the standard `src/` + `infra/` + `azure.yaml` layout used by the full [end-to-end sample](https://github.com/Azure-Samples/functions-connectors-net-e2e-email-users-teams), with the **MI + EasyAuth** security layer added on top.
 
-> ⚠️ Preview. Uses the `Microsoft.Web/connectorGateways@2026-05-01-preview` resource type and the `Azure.Connectors.Sdk` preview NuGet packages. The Connector Namespace itself only works in `brazilsouth` at the moment (the function app can live anywhere — the default is wherever `azd up` is provisioning).
+> ⚠️ Preview. Uses the `Microsoft.Web/connectorGateways@2026-05-01-preview` resource type and the `Azure.Connectors.Sdk` preview NuGet packages. The Connector Namespace itself only works in `westcentralus` at the moment (the function app can live anywhere — the default is wherever `azd up` is provisioning).
 
 ## Security model
 

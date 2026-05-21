@@ -10,7 +10,7 @@ param environmentName string
     type: 'location'
   }
 })
-@description('Location for all resources except the Connector Namespace (which is pinned to brazilsouth while in preview).')
+@description('Location for all resources except the Connector Namespace (which is pinned to westcentralus while in preview).')
 param location string
 
 metadata name = 'Azure Functions M365 Email Secured (MI + EasyAuth)'
@@ -190,7 +190,7 @@ module connectorNamespace './connectorNamespace.bicep' = {
   name: connectorNamespaceName
   params: {
     name: connectorNamespaceName
-    location: 'brazilsouth' // Connector Namespace preview is only in Brazil South for now.
+    location: 'westcentralus' // Connector Namespace preview region.
     tags: tags
     connectionName: connectorNamespaceConnectionName
     triggerIdentityResourceId: triggerUserAssignedIdentity.outputs.resourceId
