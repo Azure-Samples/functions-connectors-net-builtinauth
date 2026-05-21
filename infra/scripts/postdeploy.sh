@@ -31,9 +31,16 @@ echo -e "${YELLOW}Creating Connector Namespace trigger config...${NC}"
 
 triggerName="${connectorNamespaceConnectionName}-trigger"
 
-# No function key needed -- EasyAuth on the function app validates the AAD token
-# carried by the connector namespace's system-assigned MI on every callback.
-callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${office365FunctionName}"
+# The Functions runtime protects /runtime/webhooks/connector with a system key
+# (`connector_extension`), independent of EasyAuth. We need both layers:
+#   * EasyAuth (outer): validates the AAD token from the trigger UAMI
+#   * code= (inner):    Functions runtime webhook key check
+# Drop neither -- there's no built-in way to disable the webhook key on
+# /runtime/webhooks/* paths.
+echo -e "${CYAN}Fetching connector_extension system key for ${functionAppName}...${NC}"
+connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
+
+callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${office365FunctionName}&code=${connectorExtensionKey}"
 
 apiUrl="https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.Web/connectorGateways/${connectorNamespaceName}/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
 

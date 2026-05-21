@@ -39,7 +39,7 @@ What `infra/` sets up:
 5. **Trigger config** (created in `infra/scripts/postdeploy.sh|ps1`) — exact shape per Aparna Seth's guidance:
    ```json
    "notificationDetails": {
-     "callbackUrl": "https://<func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail",
+     "callbackUrl": "https://<func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail&code=<connector_extension key>",
      "httpMethod": "Post",
      "authentication": {
        "type": "ManagedServiceIdentity",
@@ -48,7 +48,18 @@ What `infra/` sets up:
      }
    }
    ```
-   The connector then attaches an AAD token (audience = our Entra app, signed by the trigger UAMI) on every callback. **No `code=` query string. No shared key. No client secret.**
+   The connector then attaches an AAD token (audience = our Entra app, signed by the trigger UAMI) on every callback. **No client secret. No shared key in app config.**
+
+### Two layers, on purpose
+
+EasyAuth + the `code=` system key are **independent checks**:
+
+| Layer | Where | What it gates on |
+|---|---|---|
+| EasyAuth (outer) | App Service "front door" — before the function host sees the request | AAD token: audience matches our Entra app, caller `oid` is the trigger UAMI |
+| `connector_extension` system key (inner) | Functions runtime, on `/runtime/webhooks/connector` | The `code=` query string matches the function app's `systemKeys.connector_extension` |
+
+The Functions runtime always requires a webhook system key for built-in webhook handlers like `/runtime/webhooks/connector` — there is no app setting that disables it. So we keep `code=` in the callback URL and treat EasyAuth as **defense in depth** on top: even if the system key leaks, a caller that isn't the trigger UAMI still gets a 401 at the App Service edge.
 
 The function code itself is unchanged from the hello sample — it just logs the inbound email payload.
 

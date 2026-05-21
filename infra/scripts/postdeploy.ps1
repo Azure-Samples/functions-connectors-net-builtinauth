@@ -17,8 +17,14 @@ Write-Host "Creating Connector Namespace trigger config..." -ForegroundColor Yel
 
 $triggerName = "$connectorNamespaceConnectionName-trigger"
 
-# No function key needed; EasyAuth validates the AAD token sent by the namespace MI.
-$callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$office365FunctionName"
+# The Functions runtime protects /runtime/webhooks/connector with a system key
+# (connector_extension), independent of EasyAuth. We need both layers:
+#   * EasyAuth (outer): validates the AAD token from the trigger UAMI
+#   * code= (inner):    Functions runtime webhook key check
+Write-Host "Fetching connector_extension system key for $functionAppName..." -ForegroundColor Cyan
+$connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
+
+$callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$office365FunctionName&code=$connectorExtensionKey"
 
 $apiUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
 
