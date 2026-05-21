@@ -94,7 +94,7 @@ output resourceId string = createConnectorNamespace ? newConnectorNamespace.id :
 output name string = name
 
 @description('The name of the Office 365 connection on the namespace.')
-output connectionName string = office365Connection.name
+output connectionName string = connectionName
 
 @description('Runtime URL for the Office 365 connection.')
 output office365ConnectionRuntimeUrl string = office365Connection.properties.connectionRuntimeUrl
