@@ -53,7 +53,13 @@ Write-Host "  API URL: $apiUrl" -ForegroundColor Cyan
 Write-Host "  Callback URL: $callbackUrl" -ForegroundColor Cyan
 Write-Host "  Token audience: $entraAppClientId" -ForegroundColor Cyan
 
-az rest --method PUT --url $apiUrl --body $body | Out-Null
+$bodyJson = $body
+$tmpFile = [System.IO.Path]::GetTempFileName()
+$bodyJson | Out-File -FilePath $tmpFile -Encoding utf8
+
+az rest --method PUT --url $apiUrl --body "@$tmpFile" --headers "Content-Type=application/json" | Out-Null
+
+Remove-Item $tmpFile
 
 Write-Host "Connector Namespace trigger config created." -ForegroundColor Green
 
