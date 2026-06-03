@@ -27,7 +27,7 @@ param userPrincipalId string = deployer().objectId
 @description('Name of the Azure Function that handles the Office 365 connector trigger.')
 param office365FunctionName string = 'OnNewEmail'
 
-@description('Optional. Service Management Reference (e.g. a service tree GUID) attached to the Entra app registration. Required by some tenant policies — see https://aka.ms/service-management-reference-error.')
+@description('Optional. Service Management Reference (e.g. a service tree GUID) attached to the Entra app registration. Required by some tenant policies. See https://aka.ms/service-management-reference-error.')
 param serviceManagementReference string = ''
 
 @description('When false, the Connector Namespace is referenced as existing and not re-PUT. Workaround for the RP rejecting identity in update PUTs after creation. Set this to false (via `azd env set CREATE_CONNECTOR_NAMESPACE false`) after the first successful provision to make `azd up` idempotent.')

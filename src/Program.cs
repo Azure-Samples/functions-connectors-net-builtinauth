@@ -19,7 +19,7 @@ builder.ConfigureFunctionsWebApplication();
 // exporter must authenticate via AAD using the same user-assigned managed identity
 // the function app uses (its client id is in AZURE_CLIENT_ID, set by bicep).
 // Without the credential, the exporter falls back to iKey-only auth and AI silently
-// 401s every worker log/trace export — host-side telemetry (requests) still shows
+// 401s every worker log/trace export; host-side telemetry (requests) still shows
 // up because the host uses APPLICATIONINSIGHTS_AUTHENTICATION_STRING.
 // Locally APPLICATIONINSIGHTS_CONNECTION_STRING is unset and this whole block no-ops.
 var applicationInsightsConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");

@@ -20,7 +20,7 @@ public class OnNewEmail
     {
         // If this line runs, built-in authentication already validated the caller
         // against defaultAuthorizationPolicy.allowedPrincipals at the App Service
-        // edge — anything that fails that check is 401'd before the runtime ever
+        // edge; anything that fails that check is 401'd before the runtime ever
         // dispatches to the worker. For a connector trigger the runtime's webhook
         // endpoint consumes the HTTP request and forwards only the deserialized
         // payload, so the worker can't see the bearer token or the

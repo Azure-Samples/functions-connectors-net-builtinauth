@@ -1,6 +1,6 @@
 # Azure Functions + Microsoft 365 Email secured with Managed Identity + built-in authentication
 
-> **Receive a new-email event from Microsoft 365 in an Azure Function — where the only thing allowed to invoke that function is the Connector Namespace's own managed identity (no shared keys, no client secrets, anywhere).**
+> **Receive a new-email event from Microsoft 365 in an Azure Function, where the only thing allowed to invoke that function is the Connector Namespace's own managed identity (no shared keys, no client secrets, anywhere).**
 
 ## Deploy and test
 
@@ -22,7 +22,7 @@ azd up
 
 The post-deploy hook creates the trigger config (with the `ManagedServiceIdentity` authentication block) on the Connector Namespace, installs the `connector-namespace` Azure CLI extension if needed, and opens a browser to OAuth-authorize the `office365` connection.
 
-**Confirm built-in auth is the live gate** — hit the function with no token, expect a 401:
+**Confirm built-in auth is the live gate.** Hit the function with no token, expect a 401:
 
 ```bash
 curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functionName=OnNewEmail"
@@ -30,7 +30,7 @@ curl -i "https://<your-func>.azurewebsites.net/runtime/webhooks/connector?functi
 # → WWW-Authenticate: Bearer realm="<your-func>.azurewebsites.net"
 ```
 
-**Confirm the end-to-end happy path** — send yourself an email, then check Application Insights `traces` for the `OnNewEmail invoked` line (and the rest of the payload log). You should see logs similar to the following;
+**Confirm the end-to-end happy path.** Send yourself an email, then check Application Insights `traces` for the `OnNewEmail invoked` line (and the rest of the payload log). You should see logs similar to the following;
 
 ```
 5/21/2026, 3:10:58 PM Information OnNewEmail invoked (caller pre-validated by built-in authentication).
@@ -96,12 +96,12 @@ azd down --purge
  │   └─────────────────────────┬───────────────────────────────┘   │
  │                             ▼                                   │
  │   ┌─────────────────────────────────────────────────────────┐   │
- │   │ OnNewEmail(payload)   — your code                       │   │
+ │   │ OnNewEmail(payload)   : your code                       │   │
  │   └─────────────────────────────────────────────────────────┘   │
  └─────────────────────────────────────────────────────────────────┘
                               ▲
                               │ FIC (federated identity credential)
-                              │   — function app's MI proves itself
+                              │   : function app's MI proves itself
                               │     to Entra; no client secret
               ┌───────────────┴────────────────┐
               │  Entra app registration         │
@@ -113,7 +113,7 @@ azd down --purge
 
 ## Security model
 
-Two managed identities, one Entra app, one federated trust — and **zero secrets**.
+Two managed identities, one Entra app, one federated trust, and **zero secrets**.
 
 | Component | Purpose |
 |---|---|
@@ -123,21 +123,21 @@ Two managed identities, one Entra app, one federated trust — and **zero secret
 | **App Service built-in authentication** (`authsettingsV2`) | Edge-level token validator. Configured with `clientId` = Entra app, `allowedAudiences` = its clientId/identifierUri, `allowedPrincipals.identities` = `[trigger UAMI principalId]`. |
 | **Connector Namespace** | Hosts the `office365` connection (OAuth to your mailbox) and the trigger config. |
 
-### What's enforced — and where
+### What's enforced (and where)
 
 Built-in authentication runs **inside the App Service worker, before** the Functions host sees the request. On every inbound call it validates, in order:
 
-1. **Token presence** — missing/expired ⇒ **401** (`requireAuthentication: true` + `unauthenticatedClientAction: Return401`).
-2. **Signature** — against the issuer's JWKS for your tenant.
-3. **`iss`** — must match `openIdIssuer` (`https://login.microsoftonline.com/<tenant>/v2.0`).
-4. **`aud`** — must be in `allowedAudiences`.
-5. **`defaultAuthorizationPolicy.allowedPrincipals.identities`** — the token's `oid` must equal the trigger UAMI's `principalId`. **Any other identity gets a 403**, even with an otherwise-valid token for your `aud`.
+1. **Token presence:** missing/expired ⇒ **401** (`requireAuthentication: true` + `unauthenticatedClientAction: Return401`).
+2. **Signature:** against the issuer's JWKS for your tenant.
+3. **`iss`:** must match `openIdIssuer` (`https://login.microsoftonline.com/<tenant>/v2.0`).
+4. **`aud`:** must be in `allowedAudiences`.
+5. **`defaultAuthorizationPolicy.allowedPrincipals.identities`:** the token's `oid` must equal the trigger UAMI's `principalId`. **Any other identity gets a 403**, even with an otherwise-valid token for your `aud`.
 
-This means **no application code is needed for the access check** — the function never sees a request that didn't come from the trigger UAMI.
+This means **no application code is needed for the access check**. The function never sees a request that didn't come from the trigger UAMI.
 
 ### One enforcement layer, not two
 
-`/runtime/webhooks/connector` is normally also protected by a Functions system key (`connector_extension`) — the `&code=...` query string. We opt out of that check in [`src/host.json`](src/host.json):
+`/runtime/webhooks/connector` is normally also protected by a Functions system key (`connector_extension`), the `&code=...` query string. We opt out of that check in [`src/host.json`](src/host.json):
 
 ```json
 {
